@@ -12,7 +12,7 @@ const upload = multer({ storage });
 
 // Simulated user middleware (replace with real auth)
 router.use((req, res, next) => {
-    req.user = { id: '6826e348fb2474cf833f6216' };
+    req.user = { id: '6826e6dffb2474cf833f6221' };
     next();
 });
 

@@ -1,0 +1,38 @@
+<!-- test-client.html -->
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Notification Test</title>
+</head>
+
+<body>
+    <h2>Real-Time Notifications</h2>
+    <div id="status">Connecting...</div>
+    <ul id="notifications"></ul>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script>
+        const socket = io('http://localhost:5000');
+
+        // Replace this with the _id of the post owner (the one who should get notifications)
+        const currentUserId = '6826e6dffb2474cf833f6221';
+
+        socket.on('connect', () => {
+            document.getElementById('status').innerText = 'Connected';
+            socket.emit('addUser', currentUserId);  // Register this user as online
+        });
+
+        socket.on('notifyUser', (data) => {
+            const li = document.createElement('li');
+            li.innerText = data.message;
+            document.getElementById('notifications').appendChild(li);
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('status').innerText = 'Disconnected';
+        });
+    </script>
+</body>
+
+</html>
