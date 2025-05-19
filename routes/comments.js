@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Comment = require('../models/Comment');
-const Notification = require('../models/Notification');
 const Post = require('../models/Post');
-const User = require('../models/User');
+const kafkaProducer = require('../kafka/producer');
 
 // Simulated user middleware (replace with real auth)
 router.use((req, res, next) => {
@@ -16,7 +15,7 @@ router.post('/:postId', async (req, res) => {
     try {
         const { postId } = req.params;
         const { text } = req.body;
-        const fromUser = req.user.id;
+        const fromUserId = req.user.id;
 
         if (!text) {
             return res.status(400).json({ error: 'Comment text required' });
@@ -25,36 +24,27 @@ router.post('/:postId', async (req, res) => {
         const post = await Post.findById(postId);
         if (!post) return res.status(404).json({ message: 'Post not found' })
 
-        const toUser = post.userId;
+        const toUserId = post.userId;
 
         const comment = await Comment.create({
-            userId: fromUser,
+            userId: fromUserId,
             postId,
             text
         });
 
-        const fromUserData = await User.findById(fromUser);
-
-        await Notification.create({
-            type: 'comment',
-            fromUser,
-            toUser,
-            postId,
-            message: `${fromUserData.username} commented on your post!`
+        await kafkaProducer.send({
+            topic: 'notifications',
+            messages: [
+                {
+                    value: JSON.stringify({
+                        type: 'comment',
+                        postId,
+                        toUserId,
+                        fromUserId,
+                    })
+                }
+            ]
         })
-
-        const io = req.app.get('io');
-        const onlineUsers = req.app.get('onlineUsers');
-
-        const receiverSocketId = onlineUsers.get(toUser.toString());
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit('notifyUser', {
-                type: 'comment',
-                fromUser,
-                postId,
-                message: `${fromUserData.username} commented on your post!`
-            })
-        }
 
         return res.status(201).json(comment);
     } catch (error) {

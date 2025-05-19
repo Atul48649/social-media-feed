@@ -4,6 +4,7 @@ const http = require('node:http');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io')
 const connectDB = require('./config/db');
+const startKafkaConsumer = require('./kafka/consumer');
 dotenv.config();
 
 const app = express();
@@ -14,12 +15,9 @@ const PORT = process.env.PORT || 5000;
 // Store connected users and their socket IDs
 const onlineUsers = new Map();
 
-connectDB();
+// connectDB();
 app.use(express.json());
-
-// Attach to req so we can access in controllers
-app.set('io', io);
-app.set('onlineUsers', onlineUsers);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
@@ -41,11 +39,20 @@ io.on('connection', (socket) => {
     })
 })
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Attach to req so we can access in controllers
+app.set('io', io);
+app.set('onlineUsers', onlineUsers);
+
+
+// Connect to MongoDB
+connectDB();
 
 app.use('/posts', require('./routes/posts'));
 app.use('/likes', require('./routes/likes'));
 app.use('/comments', require('./routes/comments'));
+
+// Start Kafka Consumer
+startKafkaConsumer(io, onlineUsers);
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

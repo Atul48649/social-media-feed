@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Post = require('../models/Post');
 const Like = require('../models/Like');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const kafkaProducer = require('../kafka/producer');
 
 router.use((req, res, next) => {
     req.user = { id: '6826e348fb2474cf833f6216' };
@@ -13,48 +12,38 @@ router.use((req, res, next) => {
 router.post('/:postId', async (req, res) => {
     try {
         const { postId } = req.params;
-        const userId = req.user.id;
+        const fromUserId = req.user.id;
 
         const post = await Post.findById(postId);
         if (!post) return res.status(404).json({ message: 'Post not found' });
 
+        const toUserId = post.userId;
+
         const alreadyLiked = await Like.findOne({
-            userId,
+            userId: fromUserId,
             postId
         });
-        if (alreadyLiked) {
-            return res.status(400).json({ error: 'Already liked this post' });
-        }
+        if (alreadyLiked) return res.status(400).json({ error: 'Already liked this post' });
 
         await Like.create({
-            userId,
-            postId: req.params.postId
+            userId: fromUserId,
+            postId
         })
 
-        const fromUser = await User.findById(userId);
-
-        await Notification.create({
-            type: 'like',
-            fromUser: userId,
-            toUser: post.userId,
-            postId,
-            message: `${fromUser.username} liked your post!`
+        await kafkaProducer.send({
+            topic: 'notifications',
+            messages: [
+                {
+                    value: JSON.stringify({
+                        type: 'like',
+                        postId,
+                        toUserId,
+                        fromUserId,
+                    })
+                }
+            ]
         })
-
-        const io = req.app.get('io');
-        const onlineUsers = req.app.get('onlineUsers');
-        const receiverSocketId = onlineUsers.get(post.userId.toString());
-
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit('notifyUser', {
-                type: 'like',
-                fromUser: userId,
-                postId,
-                message: `${fromUser.username} liked your post!`
-            });
-        }
-
-        res.status(200).json({ message: 'Post liked and user notified' });
+        res.status(200).json({ message: 'Post liked' });
     } catch (error) {
         console.log(error);
         return res.status(500).json({
